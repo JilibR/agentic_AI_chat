@@ -1,31 +1,45 @@
-import os
+"""
+Main fonction to produce Agentic Ai
+"""
 import logging
-from typing import TypedDict, Annotated, List
+from enum import Enum
+from typing import TypedDict, Annotated, List, Optional
 from langchain_ollama import ChatOllama
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain.tools import tool
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
-from utils.data_loader import PDF_Extractor
-from utils.vector_store import VectorStoreManager
 from pydantic import BaseModel, Field
-from typing import Optional
 from langchain_core.output_parsers import JsonOutputParser
-from enum import Enum
+from utils.data_loader import PdfExtractor
+from utils.vector_store import VectorStoreManager
 
 class ToolCategory(str, Enum):
+    """
+    Tool Category build to make defference between tools
+    """
     PERCEUSE = "Perceuse-visseuse"
     MEULEUSE = "Meuleuse"
     PERFORATEUR = "Perforateur"
     INCONNU = "Inconnu"
 
 class TechnicalValidation(BaseModel):
-    product_name: str = Field(description="Nom du produit analysé")
-    category: ToolCategory = Field(description="Catégogie des procution (ex: Meuleuse)")
-    voltage_v: Optional[int] = Field(description="Tension en Volts (ex: 18)")
-    battery_system: str = Field(description="Gamme de batterie (ex: Professional 18V)")
-    is_compatible: bool = Field(description="Vrai si les systèmes de batterie sont identiques")
-    reasoning: str = Field(description="Explication courte de la compatibilité")
+    """
+    Class to force Agent to find attribute before giving
+    a response.
+    """
+    product_name: str = Field(
+        description="Nom du produit analysé")
+    category: ToolCategory = Field(
+        description="Catégogie des procution (ex: Meuleuse)")
+    voltage_v: Optional[int] = Field(
+        description="Tension en Volts (ex: 18)")
+    battery_system: str = Field(
+        description="Gamme de batterie (ex: Professional 18V)")
+    is_compatible: bool = Field(
+        description="Vrai si les systèmes de batterie sont identiques")
+    reasoning: str = Field(
+        description="Explication courte de la compatibilité")
 
 
 parser = JsonOutputParser(pydantic_object=TechnicalValidation)
@@ -35,7 +49,7 @@ logging.basicConfig(level=logging.INFO)
 model = ChatOllama(model="gemma3:4b", temperature=0)
 
 # Init du VectorStore
-pdf = PDF_Extractor('./data').load_and_split()
+pdf = PdfExtractor('./data').load_and_split()
 vector_chroma = VectorStoreManager()
 vector_store = vector_chroma.init_or_load(pdf)
 
@@ -59,15 +73,17 @@ def agent_node(state: AgentState):
     messages = state["messages"]
     # On prépare les instructions de formatage JSON de Pydantic
     format_instructions = parser.get_format_instructions()
-    # Intermediate instruction to 
+    # Intermediate instruction
     system_instruction = SystemMessage(
         content=f"Tu es un expert technique Bosch Professional."
-            "CONNAISSANCES DE BASE : \n "
+            "CONNAISSANCES DE BASE :\n"
             "- GSR = Perceuse-visseuse (Grip, Screw, Rotary)\n"
             "- GWS = Meuleuse angulaire (Grinder, Wheel, Sanding)\n"
             "- GBH = Perforateur (Hammer)\n\n"
-            "RÈGLE : Si les appareils ne sont pas de la meme catégorie, ils ne peuvent pas être comparé\n"
-            "Une meuleuse ne peut pas percé des murs et une perceuse ne coupe pas\n"
+            "RÈGLE : Si les appareils ne sont pas de la meme catégorie, ils ne\
+                peuvent pas être comparé\n"
+            "Une meuleuse ne peut pas percé des murs et une perceuse \
+                ne coupe pas\n"
             "Chaque catégorie à sa fonction"
             "elles sont complémentaires. L'une perce, l'autre coupe/meule."
             "Réponds toujours au format JSON suivant :\n"
@@ -75,8 +91,8 @@ def agent_node(state: AgentState):
             )
     # Called agent with Instructions + history
     response = model.invoke([system_instruction] + messages)
-    
     return {"messages": [response]}
+
 
 # Define the graph
 workflow = StateGraph(AgentState)
@@ -100,9 +116,10 @@ workflow.set_entry_point("agent")
 # Compile the graph
 graph = workflow.compile()
 
-query ="J'aimerai scier du bois pour une cuisine pourrais-tu me dis quel modele serais adapté?"
-query2 = "J'aimera que que me dise quel sera la plus utile pour un petit bricoleur et pour percer."
-
+query = "J'aimerai scier du bois pour une cuisine pourrais-tu\
+    me dis quel modele serais adapté?"
+query2 = "J'aimera que que me dise quel sera la plus utile pour \
+    un petit bricoleur et pour percer."
 
 queries = [query]
 # Initialize the state

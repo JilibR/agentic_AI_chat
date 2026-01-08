@@ -1,27 +1,56 @@
+import logging
+import os
 from typing import List
 from xml.dom.minidom import Document
 from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
-import logging
-import os
-from utils.data_loader import PDF_Extractor
+from utils.data_loader import PdfExtractor
 
 MODEL_EMBEDDING = "embeddinggemma:latest"
 
+
 class VectorStoreManager:
+    """Manages the persistence and updating of a Chroma vector store for PDF document chunks.
+
+    This class provides methods to initialize, load, and update a Chroma vector store
+    with document chunks, using Ollama embeddings. It supports both creating a new store
+    and adding new documents to an existing one.
+
+    Attributes:
+        persist_directory (str): Directory where the vector store is persisted.
+        embeddings (OllamaEmbeddings): Embedding model used for vectorization.
+        vector_store (Chroma): The Chroma vector store instance.
+    """
+
     def __init__(
         self,
         persist_directory: str = "./chroma_db",
         embedding_model: str = MODEL_EMBEDDING
     ):
+        """Initializes the VectorStoreManager with a persist directory and embedding model.
+
+        Args:
+            persist_directory (str): Path to the directory for persisting the vector store.
+            embedding_model (str): Name of the Ollama embedding model to use.
+        """
         self.persist_directory = persist_directory
         self.embeddings = OllamaEmbeddings(model=embedding_model)
         self.vector_store = None
 
     def init_or_load(self, chunks: List[Document] = None) -> Chroma:
-        """
-        Initialize or load the vector store. If chunks are 
-        provided and no store exists, create a new one.
+        """Initializes or loads the vector store.
+
+        If the persist directory exists and is not empty, the store is loaded.
+        If chunks are provided and no store exists, a new store is created and persisted.
+
+        Args:
+            chunks (List[Document], optional): List of document chunks to initialize a new store.
+
+        Returns:
+            Chroma: The initialized or loaded vector store.
+
+        Raises:
+            ValueError: If neither an existing store nor chunks are provided.
         """
         if os.path.exists(self.persist_directory) and \
             os.listdir(self.persist_directory):
@@ -44,11 +73,17 @@ class VectorStoreManager:
                              and no chunks provided for creation.")
         return self.vector_store
 
-    def add_new_files_to_storage(self, 
-                                 data_directory: str = "./data") -> None:
-        """
-        Add only new PDF files (not already in the vector store) 
-        to the storage.
+    def add_new_files_to_storage(self, data_directory: str = "./data") -> None:
+        """Adds only new PDF files (not already in the vector store) to the storage.
+
+        Scans the data directory for PDFs, checks which are not already in the store,
+        and adds their chunks to the vector store.
+
+        Args:
+            data_directory (str): Path to the directory containing PDF files to check.
+
+        Raises:
+            ValueError: If the vector store is not initialized.
         """
         if not self.vector_store:
             raise ValueError("Vector store not initialized. \
@@ -65,7 +100,7 @@ class VectorStoreManager:
             logging.info("No new PDF files to add.")
             return
 
-        extractor = PDF_Extractor(data_directory)
+        extractor = PdfExtractor(data_directory)
         new_chunks = extractor.split_new_files(missing_files)
         if new_chunks:
             self.vector_store.add_documents(documents=new_chunks)
