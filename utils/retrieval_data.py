@@ -11,6 +11,6 @@ class Retriever:
         Recherche les spécifications techniques et
         compatibilités des outils Bosch.
         """
-        docs = vector_store.similarity_search(query, k=3)
+        docs = vector_store.similarity_search(query, k=5)
         return "\n\n".join([doc.page_content for doc in docs])
     
