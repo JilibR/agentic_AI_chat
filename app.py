@@ -1,55 +1,55 @@
 import streamlit as st
 import logging
-from langchain_chroma import Chroma
+import os
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain.tools import tool
 from langchain_core.messages import HumanMessage, SystemMessage
-
 from agentic_ai import TechnicalValidation, AgentState, agent_node
 from utils.data_loader import PdfExtractor
 from utils.vector_store import VectorStoreManager
+from dotenv import load_dotenv
+from utils.config import MISTRAL_API_KEY
+from langchain_mistralai import ChatMistralAI
+
 
 logging.basicConfig(level=logging.INFO)
 st.set_page_config(page_title="Bosch Tech Bot", page_icon="🛠️")
+load_dotenv()
 
-# --- INITIALISATION DES RESSOURCES (CACHÉES) ---
 @st.cache_resource
 def load_resources():
-    # 1. Vector Store (inchangé)
     pdf = PdfExtractor('./data').load_and_split()
     vector_chroma = VectorStoreManager()
     store = vector_chroma.init_or_load(pdf)
 
     parser = JsonOutputParser(pydantic_object=TechnicalValidation)
     
-    # 2. Modèle AVEC liaison d'outils
-    # On définit l'outil ICI pour qu'il ait accès au 'store'
+    # Définition de l'outil avec accès au store
     @tool
     def get_product_specs(query: str):
         """Recherche technique spécifique et compatibilité entre les outils Bosch."""
         docs = store.similarity_search(query, k=3)
-        # On affiche dans le terminal ce que l'outil trouve réellement
-        logging.info(f"DEBUG RAG - Question: {query}")
-        logging.info(f"DEBUG RAG - Docs trouvés: {len(docs)}")
-        return "\n\n".join([doc.metadata.get('source', 'Inconnu') + ": " + doc.page_content for doc in docs])
+        return "\n\n".join([f"Source: {doc.metadata.get('source')}\n{doc.page_content}" for doc in docs])
         
-    
     tools = [get_product_specs]
     
-    # CRUCIAL : On lie les outils au modèle
-    base_model = ChatOllama(model="llama3.1:8b", temperature=0)
-    model_with_tools = base_model.bind_tools(tools)
+    # Initialisation de Mistral via LangChain
+    model_with_tools = ChatMistralAI(
+        model="mistral-small-latest", 
+        api_key=MISTRAL_API_KEY,
+        temperature=0
+    ).bind_tools(tools)
     
+    # Définition du Node Agent
     def wrapped_agent_node(state):
+        # On passe le parser pour que l'agent_node puisse l'utiliser dans son prompt
         return agent_node(state, model=model_with_tools, parser=parser)
     
-    # 4. Construction du Graphe
+    # Construction du Graphe
     workflow = StateGraph(AgentState)
     workflow.add_node("agent", wrapped_agent_node)
-    #workflow.add_node("agent", wrapped_agent_node) # On utilise le node lié
     workflow.add_node("tools", ToolNode(tools))
     
     workflow.add_conditional_edges("agent", tools_condition)
@@ -81,16 +81,19 @@ if prompt := st.chat_input("Posez votre question technique..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    format_instructions = parser.get_format_instructions()
+
     # Préparation de l'état initial pour LangGraph
     state = AgentState(
         messages=[
             SystemMessage(
                 content=(
                     "Tu es un expert technique Bosch Professional. "
-                    "Utilise l'outil 'get_product_specs' pour répondre\
-                        aux questions sur les outils."
-                    "Si tu ne trouves pas l'info, ne l'invente pas."
-                    "Sois précis dans tes réponses"
+                    "Utilise l'outil 'get_product_specs' pour les recherches.\n"
+                    "CONNAISSANCES références: GSR=Perceuse, GWS=Meuleuse, GBH=Perforateur, GKS=Scie circulaire, GMP=Humidimètre.\n"
+                    "Si tu ne connais pas la réponse avec tes connaissances n'invente rien"
+                    "Tu fourniras toujours la référence de tes connaissances par exemple GSR pour une perceuse"
+                    f"Réponds toujours au format JSON suivant :\n{format_instructions}"
                 )
             ),
             HumanMessage(content=prompt),
@@ -107,8 +110,6 @@ if prompt := st.chat_input("Posez votre question technique..."):
         for event in graph.stream(state):
             for key, value in event.items():
                 if key == "tools":
-                    #logging.info(f"\n[Outils appelés: {value[0].tool}]")
-                    #logging.info(f"Entrée: {value[0].tool_input}")
                     status_placeholder.info("🔍 Recherche dans la base documentaire Bosch...")
                 elif key == "agent":
                     logging.info(f"\n[Agent]: {value['messages'][-1].content}")

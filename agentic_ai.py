@@ -1,15 +1,14 @@
-"""
-Main fonction to produce Agentic Ai
-"""
-import logging
 from enum import Enum
 from typing import Any, Dict, TypedDict, Annotated, List, Optional
-from langchain_chroma import Chroma
 from langchain_core.messages import BaseMessage, SystemMessage, AIMessage
 from pydantic import BaseModel, Field
-from langchain_core.output_parsers import JsonOutputParser
 from utils.data_loader import PdfExtractor
 from utils.vector_store import VectorStoreManager
+from langgraph.graph.message import add_messages
+import logging
+
+
+logging.basicConfig(level=logging.INFO)
 
 class ToolCategory(str, Enum):
     """
@@ -42,39 +41,32 @@ class TechnicalValidation(BaseModel):
 
 
 # Init du VectorStore
-def init_vector_store(file_path: str) -> Chroma:
+def init_vector_store(file_path: str):
     pdf = PdfExtractor(file_path).load_and_split()
     vector_chroma = VectorStoreManager()
     return vector_chroma.init_or_load(pdf)
 
 
 # --- Define Graph ---
+
 class AgentState(TypedDict):
-    messages: Annotated[List[BaseMessage], "history messages"]
+    # This 'Annotated' with 'add_messages' is crucial
+    messages: Annotated[List[BaseMessage], add_messages]
 
 
 # Define Agent
-def agent_node(state: Dict[str, Any], model, parser: JsonOutputParser) -> Dict[str, Any]:
+def agent_node(state: Dict[str, Any], model, parser) -> Dict[str, Any]:
     try:
         messages = state["messages"]
-        format_instructions = parser.get_format_instructions()
-        system_instruction = SystemMessage(
-            content=(
-                "Tu es un expert technique Bosch Professional.\n"
-                "CONNAISSANCES DE BASE :\n"
-                "- GSR = Perceuse-visseuse (Grip, Screw, Rotary)\n"
-                "- GWS = Meuleuse angulaire (Grinder, Wheel, Sanding)\n"
-                "- GBH = Perforateur (Hammer)\n\n"
-                "RÈGLES :\n"
-                "- Si les appareils ne sont pas de la même catégorie, ils ne peuvent pas être comparés.\n"
-                "- Une meuleuse ne peut pas percer des murs et une perceuse ne coupe pas.\n"
-                "- Chaque catégorie a sa fonction propre et elles sont complémentaires.\n"
-                "- Réponds toujours au format JSON suivant :\n"
-                f"{format_instructions}"
-            )
-        )
-        response = model.invoke([system_instruction] + messages)
+        
+        # Ensure we are passing the full list to the model
+        response = model.invoke(messages)
+        
+        # We return a list containing ONLY the new message. 
+        # Thanks to 'add_messages' in AgentState, this will be 
+        # automatically appended to the existing history.
         return {"messages": [response]}
     except Exception as e:
-        print(f"Error in agent_node: {e}")
-        return {"messages": [AIMessage(content="Désolé, une erreur est survenue.")]}
+        logging.error(f"Error in agent_node: {e}")
+        # Return a message that explains the error without breaking the graph
+        return {"messages": [AIMessage(content="Désolé, j'ai rencontré une erreur lors de l'analyse.")]}
