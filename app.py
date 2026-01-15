@@ -93,6 +93,7 @@ if prompt := st.chat_input("Posez votre question technique..."):
                     "CONNAISSANCES références: GSR=Perceuse, GWS=Meuleuse, GBH=Perforateur, GKS=Scie circulaire, GMP=Humidimètre.\n"
                     "Si tu ne connais pas la réponse avec tes connaissances n'invente rien"
                     "Tu fourniras toujours la référence de tes connaissances par exemple GSR pour une perceuse"
+                    "Si on te demande une information technique sur deux machine utilise 'get_product_specs' et réponds si deux élements sont égaux"
                     f"Réponds toujours au format JSON suivant :\n{format_instructions}"
                 )
             ),
