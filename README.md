@@ -1,7 +1,3 @@
-Here is a clean, professional `README.md` template tailored for your **Bosch Tech Advisor** project. It highlights the use of LangGraph, Mistral AI, and RAG (Retrieval-Augmented Generation).
-
----
-
 # 🛠️ Bosch Tech Advisor
 
 ### **AI-Powered Technical Support for Bosch Professional Tools**
