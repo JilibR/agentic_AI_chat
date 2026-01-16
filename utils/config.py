@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-# Charger les variables d'environnement du fichier .env
+# Load var env from .env
 load_dotenv()
 
 MISTRAL_API_KEY = os.getenv("MISTRAL_KEY")
