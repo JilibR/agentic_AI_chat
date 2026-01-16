@@ -1,10 +1,11 @@
 from enum import Enum
 from typing import Any, Dict, TypedDict, Annotated, List, Optional
-from langchain_core.messages import BaseMessage, SystemMessage, AIMessage
+from langchain_core.messages import BaseMessage, AIMessage
 from pydantic import BaseModel, Field
 from utils.data_loader import PdfExtractor
 from utils.vector_store import VectorStoreManager
 from langgraph.graph.message import add_messages
+
 import logging
 
 
